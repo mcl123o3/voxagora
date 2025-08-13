@@ -1,103 +1,209 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { trpc } from "@/trpc/client";
+import { useState, FormEvent, ChangeEvent, useEffect } from "react";
+import { populate } from "@/app/queries/queries"
+import { checkUserExist } from '@/app/actions'
+// probar el uso de caching para cargar los datos
+//import { caching } => "@/app/caching/caching"
+
+export default function Page() {
+
+  const [filterAuthorId, setFilterAuthorId] = useState<number | null>(null);
+
+  const { data: posts, isLoading, isError, error, refetch } = trpc.getPosts.useQuery({
+    published: true,
+    authorId: filterAuthorId,
+  });
+  const { data: authors, isLoading: isLoadingAuthors, isError: isErrorAuthors, error: errorAuthors } = trpc.getAuthors.useQuery();
+  const createPostMutation = trpc.createPost.useMutation({
+    onSuccess: () => {
+      refetch(); // Refetch posts after a new one is created
+      setNewPostTitle("");
+      setNewPostContent("");
+    },
+  });
+
+  const [newPostTitle, setNewPostTitle] = useState("");
+  const [newPostContent, setNewPostContent] = useState("");
+  const [selectedAuthorId, setSelectedAuthorId] = useState<number | string>("");
+  const [newPostPublished, setNewPostPublished] = useState(false); // New state for published checkbox
+
+  // Set initial selectedAuthorId once authors are loaded
+  // Use useEffect to react to changes in 'authors'
+  useEffect(() => {
+    if (authors && authors.length > 0 && selectedAuthorId === "") {
+      setSelectedAuthorId(authors[0].id); // Set the first author as default
+    }
+  }, [authors, selectedAuthorId]);
+
+  const handleAuthorChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    setSelectedAuthorId(Number(e.target.value));
+  };
+
+  const handleFilterAuthorChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setFilterAuthorId(value === "" ? null : Number(value));
+  };
+
+  const handleSubmitPost = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newPostTitle.trim()) {
+      alert("El título del post no puede estar vacío.");
+      return;
+    }
+    if (!selectedAuthorId) {
+      alert("Por favor, selecciona un autor.");
+      return;
+    }
+    createPostMutation.mutate({
+      title: newPostTitle,
+      content: newPostContent,
+      authorId: Number(selectedAuthorId),
+      published: newPostPublished, // Pass the published status
+    });
+  };
+
+  // para poblar la base de datos se sugiere volver a cargar la pagina.
+
+  const [userExists, setUserExists] = useState<boolean | null>(null);
+
+    useEffect(() => {
+        async function checkUser() {
+            const exists = await checkUserExist("Alice");
+            setUserExists(exists !== null); // Explicitly check if the user object is not null
+        }
+        checkUser();
+    }, []);
+
+    useEffect(() => {
+        if (userExists === false) {
+            populate();
+        }
+    }, [userExists]);
+
+    if (userExists === null) {
+        return <div>Loading...</div>; // Or a more elaborate loading state
+    }
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+    <div className="space-y-6">
+      {/* Formulario para crear un nuevo VoxAgora */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+<h2 className="text-2xl font-bold mb-4 text-[#008080]">Crear un nuevo VoxAgora</h2>
+        <form onSubmit={handleSubmitPost} className="space-y-4">
+          <div>
+            <label htmlFor="postTitle" className="block text-sm font-medium text-gray-700">Título</label>
+            <input
+              type="text"
+              id="postTitle"
+              className="mt-1 block w-full border border-[#B8860B] rounded-md shadow-sm p-2 focus:ring-[#B8860B] focus:border-[#B8860B]"
+              value={newPostTitle}
+              onChange={(e) => setNewPostTitle(e.target.value)}
+              placeholder="¿Qué estás pensando?"
+              required
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+          <div>
+            <label htmlFor="postContent" className="block text-sm font-medium text-gray-700">Contenido (opcional)</label>
+            <textarea
+              id="postContent"
+              rows={3}
+              className="mt-1 block w-full border border-[#B8860B] rounded-md shadow-sm p-2 focus:ring-[#B8860B] focus:border-[#B8860B]"
+              value={newPostContent}
+              onChange={(e) => setNewPostContent(e.target.value)}
+              placeholder="Detalles adicionales..."
+            ></textarea>
+          </div>
+          <div>
+            <label htmlFor="authorSelect" className="block text-sm font-medium text-gray-700">Autor</label>
+            <select
+              id="authorSelect"
+              className="mt-1 block w-full border border-[#B8860B] rounded-md shadow-sm p-2 focus:ring-[#B8860B] focus:border-[#B8860B]"
+              value={selectedAuthorId}
+              onChange={handleAuthorChange}
+              required
+            >
+              <option value="">Selecciona un autor</option>
+              {isLoadingAuthors && <option>Cargando autores...</option>}
+              {isErrorAuthors && <option>Error al cargar autores: {errorAuthors?.message}</option>}
+              {authors?.map((author) => (
+                <option key={author.id} value={author.id}>
+              {author.name}
+            </option>
+          ))}
+        </select>
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="publishedCheckbox"
+              checked={newPostPublished}
+              onChange={(e) => setNewPostPublished(e.target.checked)}
+              className="h-4 w-4 text-[#008080] focus:ring-[#B8860B] border-[#B8860B] rounded"
+            />
+            <label htmlFor="publishedCheckbox" className="ml-2 block text-sm text-gray-900">
+              Publicar inmediatamente
+            </label>
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-[#008080] text-white py-2 px-4 rounded-md hover:bg-[#006666] focus:outline-none focus:ring-2 focus:ring-[#B8860B] focus:ring-offset-2 border-b-2 border-[#B8860B]"
+            disabled={createPostMutation.status === 'pending' || isLoadingAuthors || isErrorAuthors}
           >
-            Read our docs
-          </a>
+            {createPostMutation.status === 'pending' ? "Publicando..." : "Publicar VoxAgora"}
+          </button>
+          {createPostMutation.isError && (
+            <p className="text-red-500 text-sm mt-2">Error al publicar: {createPostMutation.error.message}</p>
+          )}
+        </form>
+      </div>
+
+      {/* Filtro de VoxAgoras por autor */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold mb-4 text-[#008080]">Filtrar VoxAgoras</h2>
+        <div>
+          <label htmlFor="filterAuthorSelect" className="block text-sm font-medium text-gray-700">Filtrar por Autor</label>
+          <select
+            id="filterAuthorSelect"
+            className="mt-1 block w-full border border-[#B8860B] rounded-md shadow-sm p-2 focus:ring-[#B8860B] focus:border-[#B8860B]"
+            value={filterAuthorId === null ? "" : filterAuthorId}
+            onChange={handleFilterAuthorChange}
+          >
+            <option value="">Mostrar todos los autores</option>
+            {isLoadingAuthors && <option>Cargando autores...</option>}
+            {isErrorAuthors && <option>Error al cargar autores: {errorAuthors?.message}</option>}
+            {authors?.map((author) => (
+              <option key={author.id} value={author.id}>
+                {author.name}
+              </option>
+            ))}
+          </select>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+
+      {/* Lista de VoxAgoras */}
+      <h2 className="text-2xl font-bold text-[#008080]">Últimos VoxAgoras</h2>
+      {isLoading && <p className="text-center text-gray-600">Cargando VoxAgoras...</p>}
+      {isError && <p className="text-center text-red-500">Error al cargar VoxAgoras: {error?.message}</p>}
+
+      <div className="space-y-4">
+        {posts?.map((post) => (
+          <div key={post.id} className="bg-white p-4 rounded-lg shadow-md border border-[#B8860B]">
+            <div className="flex items-center mb-2">
+              <div className="w-8 h-8 bg-[#B2D8D8] rounded-full flex items-center justify-center text-[#004D4D] font-semibold text-sm mr-3">
+                {post.author?.name ? post.author.name.charAt(0).toUpperCase() : "U"}
+              </div>
+              <p className="font-semibold text-gray-900">{post.author?.name || "Usuario Desconocido"}</p>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-1">{post.title}</h3>
+            {post.content && <p className="text-gray-700">{post.content}</p>}
+            <p className="text-xs text-gray-500 mt-2">ID del Post: {post.id}</p>
+          </div>
+        ))}
+        {posts?.length === 0 && !isLoading && !isError && (
+          <p className="text-center text-gray-600">No hay VoxAgoras para mostrar. ¡Sé el primero en publicar!</p>
+        )}
+      </div>
     </div>
   );
 }
